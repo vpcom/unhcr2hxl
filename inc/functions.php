@@ -3,16 +3,147 @@
 /*******************************
  *
  *****************************/
-function printContainers($dbContent)
+function displayDropCurlCommand($graph)
 {
-    global $reporter, $ttlContainerHeader, $ttlContainerUri, $ttlPrefixes;
+    global $storeConfig, $curlDropOneContainer, $curlDropFile, $log;
+    
+    $stringData = str_replace("[%graph%]", $graph, $curlDropOneContainer);
+    $stringData = str_replace("[%userPass%]", $storeConfig['store_username'] . ':' . $storeConfig['store_password'], $stringData);
+    $stringData = str_replace("[%endPoint%]", $storeConfig['store_endpoint'], $stringData);
+    
+    
+    print_r('<pre>');
+    print_r($stringData);
+    print_r('</pre>');
+   
+    $fileHandle = fopen($curlDropFile, 'w') or die("can't open file");
+    fwrite($fileHandle, $stringData);
+    fclose($fileHandle);
 
+}
+
+/*******************************
+ *
+ *****************************/
+function displayDropEmergencyContainers($dbContent)
+{
+    global $storeConfig, $curlDropOneEmergency, $curlDropFile, $log;
+    
+    $stringData = '';
+    
+    while($row = mysqli_fetch_array($dbContent))
+    {
+        $tempDataData = str_replace("[%endPoint%]", $storeConfig['store_endpoint'], $curlDropOneContainer);
+        $tempDataData = str_replace("[%userPass%]", $storeConfig['store_username'] . ':' . $storeConfig['store_password'], $tempDataData);
+        $stringData .= $tempData;
+    }
+    
+    print_r('<pre>');
+    print_r($stringData);
+    print_r('</pre>');
+   
+    $fileHandle = fopen($curlDropFile, 'w') or die("can't open file");
+    fwrite($fileHandle, $stringData);
+    fclose($fileHandle);
+}
+
+/*****************************
+ *
+ *****************************/
+function giveFirstRow($dbContent)
+{
+    global $reporter, $ttlContainerHeader, $ttlContainerUri, $ttlPrefixes, $currentEmergency;
+    global $timeStamp, $scriptDate;
     global $log;
+
+    $i = 0;
+    $containerUriArray = array();
+    $containerArray = array();
+    
+    while($row = mysqli_fetch_array($dbContent))
+    {
+        $stringData = '';
+        $ttlCamp = makeTtlFromRow($row);
+
+        if ($ttlCamp != false)
+        {
+            $ttlContainerUri = str_replace("[%timeStamp%]", $timeStamp, $ttlContainerUri);
+            array_push($containerUriArray, $ttlContainerUri);
+
+            //$stringData .= $ttlPrefixes;
+            $stringData .= makeContainerHeader($row, $scriptDate, $ttlContainerUri, $reporter, $ttlContainerHeader, $currentEmergency);
+            $stringData .= $ttlCamp;
+
+            array_push($containerArray, $stringData);
+        }
+    }
+    
+    return array ($containerUriArray, $containerArray);
+}
+
+/*****************************
+ *
+ *****************************/
+function extractRowData($row)
+{
+    global $reporter, $ttlContainerHeader, $ttlContainerUri, $ttlPrefixes, $currentEmergency;
+    global $log;
+    //global $timeStamp, $scriptDate;
+
+    $containerUriArray = array();
+    $containerArray = array();
+    
+
     $dateTime = new DateTime();
     $scriptDate = $dateTime->format('Y-m-d H:i:s');
     $timeStamp = microtime(true);
 
-    $reporter = "unhcr";
+
+
+    $stringData = '';
+
+    $tempContainerUri = str_replace("[%timeStamp%]", $timeStamp, $ttlContainerUri);
+    array_push($containerUriArray, $tempContainerUri);
+
+    //$stringData .= $ttlPrefixes;
+    $stringData .= makeContainerHeader($row, $scriptDate, $tempContainerUri, $reporter, $ttlContainerHeader, $currentEmergency);
+    $stringData .= makeTtlFromRow($row);
+    
+    array_push($containerArray, $stringData);	
+
+
+    
+    
+    global $storeConfig, $curlDropOneContainer;
+    
+    //echo $curlDropOneContainer;
+    //echo "-------------------";
+    
+    
+    
+    $tempDrop = str_replace("[%graph%]", $tempContainerUri, $curlDropOneContainer);
+    $tempDrop = str_replace("[%userPass%]", $storeConfig['store_username'] . ':' . $storeConfig['store_password'], $tempDrop);
+    $tempDrop = str_replace("[%endPoint%]", $storeConfig['store_endpoint'], $tempDrop);
+    
+    
+    //echo $tempDrop;
+    //echo "-------------------";
+    
+    
+    
+    
+    return array ($containerUriArray, $containerArray, $tempDrop);
+}
+
+/*****************************
+ *
+ *****************************/
+function printContainers($dbContent)
+{
+    global $reporter, $ttlContainerHeader, $ttlContainerUri, $ttlPrefixes, $currentEmergency;
+    global $timeStamp, $scriptDate;
+
+    global $log;
 
     $log->write("----------------------------------------------------------------");
     $log->write("Number of rows: " . $dbContent->num_rows);
@@ -36,24 +167,24 @@ function printContainers($dbContent)
         array_push($containerUriArray, $ttlContainerUri);
 
         $stringData .= $ttlPrefixes;
-        $stringData .= makeContainerHeader($row, $scriptDate, $ttlContainerUri, $reporter, $ttlContainerHeader);
+        $stringData .= makeContainerHeader($row, $scriptDate, $ttlContainerUri, $reporter, $ttlContainerHeader, $currentEmergency);
         $stringData .= makeTtlFromRow($row);
         
         array_push($containerArray, $stringData);
 
 
-        //if($i == 2) break;
+        if($i == 2) break;
         
 
-/* If need to write in a file, reuse this code
+    /* If need to write in a file, reuse this code
     $fileHandle = fopen($ourFileName, 'w') or die("can't open file");
     fwrite($fileHandle, $stringData);
-
     fclose($fileHandle);
-*/
+ */
+
 			
      }	
-     /* to print the list of container URIs and containers
+     /* to print the list of container URIs and containers */
     print_r("<pre>");
     print_r($containerUriArray);
     print_r("</pre>");
@@ -61,26 +192,24 @@ function printContainers($dbContent)
     print_r("<pre>");
     print_r($containerArray);
     print_r("</pre>");
-      */
+     
 }
 
 /*******************************
  *
  *****************************/
-function makeContainerHeader($row, $scriptDate, $containerUri,  $reporter, $ttlContainerHeader)
+function makeContainerHeader($row, $scriptDate, $containerUri,  $reporter, $ttlContainerHeader, $currentEmergency)
 {
     $ttlContainerHeader = str_replace("[%containerUri%]", $containerUri, $ttlContainerHeader);
+    $ttlContainerHeader = str_replace("[%currentEmergency%]", $currentEmergency, $ttlContainerHeader);
 
     $ttlContainerHeader = str_replace("[%reportDate%]", $scriptDate, $ttlContainerHeader);
     $ttlContainerHeader = str_replace("[%reporter%]", $reporter, $ttlContainerHeader);
-//	$ttlContainerHeader = str_replace("[%emergency%]", htmlspecialchars("<") . $emergency . htmlspecialchars(">"), $ttlContainerHeader);
 
-    $tempTtlContainerHeader = $ttlContainerHeader;
+    //$tempTtlContainerHeader = $ttlContainerHeader;
+    $ttlContainerHeader = str_replace("[%validOn%]", $row['ReportDate'], $ttlContainerHeader);
 
-    $tempTtlContainerHeader = str_replace("[%validOn%]", $row['ReportDate'], $tempTtlContainerHeader);
-//$ttlSubject = htmlspecialchars("<http://hxl.humanitarianresponse.info/data/[%popTypePart%]/[%countryPCode%]/[%campPCode%]/[%originPCode%]/[%sex%]/[%age%]>");
-
-    return $tempTtlContainerHeader;
+    return $ttlContainerHeader;
 }
 
 /*******************************
@@ -97,68 +226,107 @@ function makeTtlFromRow($row)
     $stringData .= makeTtlPopDescriptiom($row, $sex, $age, $row['TotalRefPop_HH']);
     */
 
+    $query= "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    PREFIX hxl: <http://hxl.humanitarianresponse.info/ns/#>
 
-    if(countAvailable($row, $row['ReportDate']))
+    SELECT DISTINCT * WHERE {
+    ?location hxl:pcode \"" . $row['settlementPcode'] . "\" .
+    ?location a ?type .
+    }";
+/*
+    echo '<br>';
+    echo htmlspecialchars($query);
+    echo '<br>';
+*/ 
+
+    $found = false;
+    $queryResult = getQueryResults($query);
+    if ($queryResult->num_rows() == 0) 
     {
-
-
-	////////////////////
-	$age = "ages_0-4";
-	//$row['DEM_04_M']
-	$sex = "male";
-	$stringData .= makeTtlPopDescriptiom($row, $sex, $age, $row['DEM_04_M']);
-	//$row['DEM_04_F']
-	$sex = "female";
-	$stringData .= makeTtlPopDescriptiom($row, $sex, $age, $row['DEM_04_F']);
-
-	////////////////////
-	$age = "ages_5-11";
-	//$row['DEM_511_M']
-	$sex = "male";
-	$stringData .= makeTtlPopDescriptiom($row, $sex, $age, $row['DEM_511_M']);
-	//$row['DEM_511_F']
-	$sex = "female";
-	$stringData .= makeTtlPopDescriptiom($row, $sex, $age, $row['DEM_511_F']);
-
-	////////////////////
-	$age = "ages_12-17";
-	//$row['DEM_1217_M']
-	$sex = "male";
-	$stringData .= makeTtlPopDescriptiom($row, $sex, $age, $row['DEM_1217_M']);
-	//$row['DEM_1217_F']
-	$sex = "female";
-	$stringData .= makeTtlPopDescriptiom($row, $sex, $age, $row['DEM_1217_F']);
-
-	////////////////////
-	$age = "ages_18-59";
-	//$row['DEM_1859_M']
-	$sex = "male";
-	$stringData .= makeTtlPopDescriptiom($row, $sex, $age, $row['DEM_1859_M']);
-	//$row['DEM_1859_F']
-	$sex = "female";
-	$stringData .= makeTtlPopDescriptiom($row, $sex, $age, $row['DEM_1859_F']);
-
-	////////////////////
-	$age = "ages_60";
-	//$row['DEM_60_M']
-	$sex = "male";
-	$stringData .= makeTtlPopDescriptiom($row, $sex, $age, $row['DEM_60_M']);
-	//$row['DEM_60_F']
-	$sex = "female";
-	$stringData .= makeTtlPopDescriptiom($row, $sex, $age, $row['DEM_60_F']);
-
+        $log->write("Error: pcode " . $row['settlementPcode'] . " not found.");
+    }
+    else 
+    {
+        //print_r($queryResult);
+        while($row = $queryResult->fetch_array())
+        {  
+            if ($row["type"] == 'http://hxl.humanitarianresponse.info/ns/#APL')
+            {
+                $found = true;
+            }
+            else
+            {
+                $log->write($row['settlementPcode'] . " is: " . $row["type"] . ".");
+            }
+        } 
     }
 
-    return $stringData;
+    if(countAvailable($row, $row['ReportDate']) &&
+       $found)
+    {
+        ////////////////////
+        $age = "ages_0-4";
+        //$row['DEM_04_M']
+        $sex = "male";
+        $stringData .= makeTtlPopDescriptiom($row, $sex, $age, $row['DEM_04_M']);
+        //$row['DEM_04_F']
+        $sex = "female";
+        $stringData .= makeTtlPopDescriptiom($row, $sex, $age, $row['DEM_04_F']);
+
+        ////////////////////
+        $age = "ages_5-11";
+        //$row['DEM_511_M']
+        $sex = "male";
+        $stringData .= makeTtlPopDescriptiom($row, $sex, $age, $row['DEM_511_M']);
+        //$row['DEM_511_F']
+        $sex = "female";
+        $stringData .= makeTtlPopDescriptiom($row, $sex, $age, $row['DEM_511_F']);
+
+        ////////////////////
+        $age = "ages_12-17";
+        //$row['DEM_1217_M']
+        $sex = "male";
+        $stringData .= makeTtlPopDescriptiom($row, $sex, $age, $row['DEM_1217_M']);
+        //$row['DEM_1217_F']
+        $sex = "female";
+        $stringData .= makeTtlPopDescriptiom($row, $sex, $age, $row['DEM_1217_F']);
+
+        ////////////////////
+        $age = "ages_18-59";
+        //$row['DEM_1859_M']
+        $sex = "male";
+        $stringData .= makeTtlPopDescriptiom($row, $sex, $age, $row['DEM_1859_M']);
+        //$row['DEM_1859_F']
+        $sex = "female";
+        $stringData .= makeTtlPopDescriptiom($row, $sex, $age, $row['DEM_1859_F']);
+
+        ////////////////////
+        $age = "ages_60";
+        //$row['DEM_60_M']
+        $sex = "male";
+        $stringData .= makeTtlPopDescriptiom($row, $sex, $age, $row['DEM_60_M']);
+        //$row['DEM_60_F']
+        $sex = "female";
+        $stringData .= makeTtlPopDescriptiom($row, $sex, $age, $row['DEM_60_F']);
+        
+        return $stringData;
+    }
+    else
+    {
+        return false;
+    }
+
 }
 
-/*******************************
+/******************************
  *
  *****************************/
 function makeTtlPopDescriptiom($row, $sex, $age, $popCount)
 {
     global $log, $ttlPersonCount, $ttlHouseholdCount, $ttlPopDescription, $ttlSex, $ttlAge, $ttlSubject;
+    global $defaultPopulationType;
 
+    $ttlSubject = str_replace("[%populationType%]", $defaultPopulationType, $ttlSubject);
     $ttlSubject = str_replace("[%countryPCode%]", $row['currentCountryPcode'], $ttlSubject);
     $ttlSubject = str_replace("[%campPCode%]", $row['settlementPcode'], $ttlSubject);
     $ttlSubject = str_replace("[%originPCode%]", $row['origin'], $ttlSubject);
@@ -235,7 +403,7 @@ function countAvailable($row, $reportDate)
         empty($row['DEM_60_M']) &
         empty($row['DEM_60_F']))
     {
-        $log->write("Warning: Missing population counts at the date " . $reportDate);
+        $log->write("Warning: No detail of population count found at " . $row['settlementPcode'] . " on " . $reportDate);
         return false;
     }
     else
